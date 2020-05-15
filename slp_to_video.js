@@ -54,7 +54,8 @@ const generateReplayConfig = async (replay, basedir) => {
     startFrame: replay.startFrame != null ? replay.startFrame : -123,
     endFrame: replay.endFrame != null ? replay.endFrame : metadata.lastFrame,
     isRealTimeMode: false,
-    commandId: `${crypto.randomBytes(12).toString('hex')}`
+    commandId: `${crypto.randomBytes(12).toString('hex')}`,
+    overlayPath: replay.overlayPath
   }
   const configFn = path.join(basedir,
                              `${metadata.startAt.replace(/:/g, '')}.json`)
@@ -131,17 +132,34 @@ const processReplayConfigs = async (files) => {
 
   files.forEach((file) => {
     const basename = path.join(path.dirname(file), path.basename(file, '.json'))
+    const config = fs.readFileSync(file, 'utf8')
+    const strung = config.split('\"overlayPath\":\"')
+    const overlayPath = strung[1].split('\"')[0]
+    // test
+    console.log('config ' + config)
+    console.log('overlayPath ' + overlayPath)
     dolphinArgsArray.push([
       '-i', file,
       '-o', basename,
       '-b', '-e', SSBM_ISO_PATH
     ])
-    ffmpegMergeArgsArray.push([
-      '-i', `${basename}.avi`,
-      '-i', `${basename}.wav`,
-      '-b:v', '15M',
-      `${basename}-merged.avi`
-    ])
+    if (overlayPath != null) {
+      ffmpegMergeArgsArray.push([
+        '-i', `${basename}.avi`,
+        '-i', overlayPath,
+        '-filter_complex', 'overlay',
+        '-i', `${basename}.wav`,
+        '-b:v', '15M',
+        `${basename}-merged.avi`
+      ])
+    } else {
+      ffmpegMergeArgsArray.push([
+        '-i', `${basename}.avi`,
+        '-i', `${basename}.wav`,
+        '-b:v', '15M',
+        `${basename}-merged.avi`
+      ])
+    }
     ffmpegBlackDetectArgsArray.push([
       '-i', `${basename}-merged.avi`,
       '-vf', 'blackdetect=d=0.01:pix_th=0.01',
@@ -175,24 +193,32 @@ const processReplayConfigs = async (files) => {
   promises = []
   files.forEach((file) => {
     const basename = path.join(path.dirname(file), path.basename(file, '.json'))
+    // test
+    console.log('basename ' + basename)
     const promise = fsPromises.readFile(`${basename}-merged-blackdetect.json`,
       { encoding: 'utf8' })
       .then((contents) => {
         const blackFrames = JSON.parse(contents)
-        let trimParameters = `start=${blackFrames[0].blackEnd}`
-        if (blackFrames.length > 1) {
-          trimParameters = trimParameters.concat(
-            `:end=${blackFrames[1].blackStart}`)
+        // test
+        console.log('contents ' + contents)
+        if (blackFrames.length < 1) {
+          console.log('no black frames...?')
+        } else {
+          let trimParameters = `start=${blackFrames[0].blackEnd}`
+          if (blackFrames.length > 1) {
+            trimParameters = trimParameters.concat(
+              `:end=${blackFrames[1].blackStart}`)
+          }
+          ffmpegTrimArgsArray.push([
+            '-i', `${basename}-merged.avi`,
+            '-b:v', '15M',
+            '-filter_complex',
+            `[0:v]trim=${trimParameters},setpts=PTS-STARTPTS[v1];` +
+            `[0:a]atrim=${trimParameters},asetpts=PTS-STARTPTS[a1]`,
+            '-map', '[v1]', '-map', '[a1]',
+            `${basename}-trimmed.avi`
+          ])
         }
-        ffmpegTrimArgsArray.push([
-          '-i', `${basename}-merged.avi`,
-          '-b:v', '15M',
-          '-filter_complex',
-          `[0:v]trim=${trimParameters},setpts=PTS-STARTPTS[v1];` +
-          `[0:a]atrim=${trimParameters},asetpts=PTS-STARTPTS[a1]`,
-          '-map', '[v1]', '-map', '[a1]',
-          `${basename}-trimmed.avi`
-        ])
       })
     promises.push(promise)
   })

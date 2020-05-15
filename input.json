@@ -1,0 +1,16 @@
+[
+    {"outputPath": "/home/nash/Desktop/stv/set2.avi",
+     "replays": [
+        {"replay": "/home/nash/Desktop/stv/set2/game1.slp",
+         "startFrame": 0,
+         "endFrame": 500,
+         "overlayPath": "./overlay.png"
+        },
+        {"replay": "/home/nash/Desktop/stv/set2/game2.slp",
+         "startFrame": 100,
+         "endFrame": 1000,
+         "overlayPath": "./overlay.png"
+        }
+     ]
+    }
+]
